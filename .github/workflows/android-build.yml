@@ -49,9 +49,7 @@ jobs:
           java-version: '17'
 
       - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-
-      y"          
+        uses: android-actions/setup-android@v3y"          
       - name: Install Buildozer
         run: |
           python -m pip install --upgrade pip
