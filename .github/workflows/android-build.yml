@@ -12,17 +12,26 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Extract ChessAI source
-        run: |
-          unzip -o ChessAI_CHECKMATE_resolved.zip
-          ls -la
-          ls -la ChessAI
+  run: |
+    unzip -o ChessAI_CHECKMATE_resolved.zip
 
-          echo "Configuring Buildozer..."
+    echo "Extracted files:"
+    ls -la
+    ls -la ChessAI_CHECKMATE_resolved
 
-          sed -i '/^\[app\]/a android.accept_sdk_license = True' ChessAI/buildozer.spec
+    # Move ChessAI to the location expected by the workflow
+    rm -rf ChessAI
+    mv ChessAI_CHECKMATE_resolved/ChessAI ChessAI
 
-          echo "Final Buildozer configuration:"
-          grep -E "requirements|p4a.branch|android.api|android.ndk|android.accept_sdk_license" ChessAI/buildozer.spec || true
+    echo "ChessAI directory:"
+    ls -la ChessAI
+
+    echo "Configuring Buildozer..."
+
+    sed -i '/^\[app\]/a android.accept_sdk_license = True' ChessAI/buildozer.spec
+
+    echo "Final Buildozer configuration:"
+    grep -E "requirements|p4a.branch|android.api|android.ndk|android.accept_sdk_license" ChessAI/buildozer.spec || true
 
       - name: Set up Python
         uses: actions/setup-python@v5
