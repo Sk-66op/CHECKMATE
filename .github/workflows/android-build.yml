@@ -111,7 +111,7 @@ jobs:
 
           pip install buildozer
 
-          pip install "cython==0.29.37"
+          pip install "cython==3.0.10"
 
       - name: Verify Build Environment
         run: |
