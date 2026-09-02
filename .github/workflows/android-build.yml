@@ -45,7 +45,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.10"
 
       - name: Install system dependencies
         run: |
@@ -111,7 +111,7 @@ jobs:
 
           pip install buildozer
 
-          pip install "cython==0.29.40"
+          pip install "cython==0.29.37"
 
       - name: Verify Build Environment
         run: |
