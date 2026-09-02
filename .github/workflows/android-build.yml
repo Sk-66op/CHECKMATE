@@ -17,6 +17,12 @@ jobs:
           unzip -o ChessAI_CHECKMATE_resolved.zip
           ls -la
           ls -la ChessAI
+          echo "Enabling automatic Android SDK license acceptance..."
+
+          sed -i '/^\[app\]/a android.accept_sdk_license = True' ChessAI/buildozer.spec
+
+          echo "Checking buildozer.spec:"
+          grep -E "android\.(api|minapi|ndk|accept_sdk_license)" ChessAI/buildozer.spec
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -97,19 +103,15 @@ jobs:
           echo "AIDL:"
           "$ANDROID_HOME/build-tools/33.0.2/aidl" 2>&1 | head -20 || true
 
+
+
       - name: Build APK
         working-directory: ChessAI
         run: |
           export ANDROIDSDK="$ANDROID_HOME"
           export ANDROID_SDK_ROOT="$ANDROID_HOME"
-          export PATH="$ANDROID_HOME/platform-tools:$ANDROID_HOME/build-tools/33.0.2:$PATH"
 
-          echo "ANDROIDSDK=$ANDROIDSDK"
-          echo "ANDROID_HOME=$ANDROID_HOME"
-
-          echo "Checking AIDL before Buildozer:"
-          which aidl || true
-          ls -l "$ANDROID_HOME/build-tools/33.0.2/aidl"
+          echo "Starting Buildozer..."
 
           buildozer android debug
 
