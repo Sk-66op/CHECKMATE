@@ -122,9 +122,11 @@ ChessAI/buildozer.spec
      ANDROIDSDK="$ANDROID_HOME"
          export
      ANDROID_SDK_ROOT="$ANDROID_HOME"
-         export PATH="$ANDROID_HOME/platform-tools:$ANDROID_HOME/build-tools/33.0.2:$PATH"
+         export PATH="$ANDROID_HOME/.
+     platform-tools:$ANDROID_HOME/
+     build-tools/33.0.2:$PATH"
 
-    buildozer android debug
+         buildozer android debug
  
 
       - name: Upload APK
