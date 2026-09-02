@@ -11,25 +11,18 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-     - name: Extract ChessAI source
-       run: |
-         unzip -o
-     ChessAI_CHECKMATE_resolved.zip
-         ls -la
-         ls -la ChessAI
+      - name: Extract ChessAI source
+        run: |
+          unzip -o ChessAI_CHECKMATE_resolved.zip
+          ls -la
+          ls -la ChessAI
 
-         echo "Configuring Buildozer..."
+          echo "Configuring Buildozer..."
 
-         sed -i '/^\[app\]/a
-     android.accept_sdk_license = True'
-     ChessAI/buildozer.spec
+          sed -i '/^\[app\]/a android.accept_sdk_license = True' ChessAI/buildozer.spec
 
-         echo "Final Buildozer
-     configuration:"
-         grep -E "requirements|p4a.branch|
-     android.api|android.ndk
-     android.accept_sdk_license" ChessAI/.  
-     buildozer.spec || true
+          echo "Final Buildozer configuration:"
+          grep -E "requirements|p4a.branch|android.api|android.ndk|android.accept_sdk_license" ChessAI/buildozer.spec || true
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -85,6 +78,7 @@ jobs:
           echo "$ANDROID_HOME"
 
           echo "Checking AIDL..."
+
           test -x "$ANDROID_HOME/build-tools/33.0.2/aidl"
 
           echo "AIDL found successfully!"
@@ -97,20 +91,28 @@ jobs:
 
       - name: Verify Build Environment
         run: |
+          echo "======================================"
           echo "Java:"
           java -version
 
+          echo "======================================"
           echo "Python:"
           python --version
 
+          echo "======================================"
           echo "Buildozer:"
           buildozer --version
 
+          echo "======================================"
           echo "Android SDK:"
           echo "$ANDROID_HOME"
 
+          echo "======================================"
           echo "AIDL:"
           "$ANDROID_HOME/build-tools/33.0.2/aidl" 2>&1 | head -20 || true
+
+          echo "======================================"
+          echo "Build environment verified."
 
       - name: Clean previous Android build
         working-directory: ChessAI
@@ -126,9 +128,19 @@ jobs:
 
           export PATH="$ANDROID_HOME/platform-tools:$ANDROID_HOME/build-tools/33.0.2:$PATH"
 
+          echo "Starting Buildozer Android build..."
+
           buildozer android debug
 
+      - name: List generated APK
+        if: success()
+        working-directory: ChessAI
+        run: |
+          echo "Generated APK files:"
+          ls -lah bin/
+
       - name: Upload APK
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: ChessAI-debug-APK
