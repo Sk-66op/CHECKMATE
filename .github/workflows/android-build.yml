@@ -110,11 +110,12 @@ ChessAI/buildozer.spec
           echo "AIDL:"
           "$ANDROID_HOME/build-tools/33.0.2/aidl" 2>&1 | head -20 || true
 
-     - name: Clean previous Android build
+     - name:Clean previous Android build
        working-directory: ChessAI
        run: |
          rm -rf .buildozer
          rm -rf bin
+
      - name: Build APK
        working-directory: ChessAI
        run: |
