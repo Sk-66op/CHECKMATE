@@ -21,12 +21,7 @@ jobs:
           ls -la
           ls -la ChessAI_CHECKMATE_resolved
 
-          # The ZIP contains:
-          # ChessAI_CHECKMATE_resolved/ChessAI/
-          # Move ChessAI to the location expected by Buildozer.
-
           rm -rf ChessAI
-
           mv ChessAI_CHECKMATE_resolved/ChessAI ChessAI
 
           echo "ChessAI directory:"
@@ -34,13 +29,29 @@ jobs:
 
           echo "Checking buildozer.spec..."
           test -f ChessAI/buildozer.spec
+          
+          echo "Original buildozer.spec (relevant sections):"
+          grep -E "python|version" ChessAI/buildozer.spec | head -20
 
           echo "Configuring Buildozer..."
 
           sed -i '/^\[app\]/a android.accept_sdk_license = True' ChessAI/buildozer.spec
 
-          echo "Final Buildozer configuration:"
-          grep -E "requirements|p4a.branch|android.api|android.minapi|android.ndk|android.archs|android.accept_sdk_license" ChessAI/buildozer.spec || true
+          # 🔧 FIX: Force Python 3.11 for Android build (Kivy 2.3.0 incompatible with Python 3.14)
+          # Try multiple possible setting names
+          sed -i 's/^android\.pythonVersion.*$/android.pythonVersion = 3.11/' ChessAI/buildozer.spec || true
+          sed -i 's/^python\.version.*$/python.version = 3.11/' ChessAI/buildozer.spec || true
+          
+          # If neither exists, add it after [app] section
+          if ! grep -q "pythonVersion\|python.version" ChessAI/buildozer.spec; then
+            sed -i '/^\[app\]/a android.pythonVersion = 3.11' ChessAI/buildozer.spec
+          fi
+
+          echo "Final Buildozer configuration (Python settings):"
+          grep -E "pythonVersion|python.version" ChessAI/buildozer.spec || echo "⚠️  No python version setting found - using default"
+          
+          echo "All app settings:"
+          sed -n '/^\[app\]/,/^\[.*\]/p' ChessAI/buildozer.spec | head -30
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -151,6 +162,10 @@ jobs:
           echo "======================================"
           echo "buildozer.spec requirements:"
           grep "^requirements" buildozer.spec || true
+
+          echo "======================================"
+          echo "Python version setting:"
+          grep -E "pythonVersion|python\.version" buildozer.spec || echo "⚠️  Not found"
 
           echo "======================================"
           echo "Android configuration:"
