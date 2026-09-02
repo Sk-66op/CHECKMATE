@@ -12,26 +12,35 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Extract ChessAI source
-  run: |
-    unzip -o ChessAI_CHECKMATE_resolved.zip
+        run: |
+          echo "Extracting ChessAI project..."
 
-    echo "Extracted files:"
-    ls -la
-    ls -la ChessAI_CHECKMATE_resolved
+          unzip -o ChessAI_CHECKMATE_resolved.zip
 
-    # Move ChessAI to the location expected by the workflow
-    rm -rf ChessAI
-    mv ChessAI_CHECKMATE_resolved/ChessAI ChessAI
+          echo "Contents after extraction:"
+          ls -la
+          ls -la ChessAI_CHECKMATE_resolved
 
-    echo "ChessAI directory:"
-    ls -la ChessAI
+          # The ZIP contains:
+          # ChessAI_CHECKMATE_resolved/ChessAI/
+          # Move ChessAI to the location expected by Buildozer.
 
-    echo "Configuring Buildozer..."
+          rm -rf ChessAI
 
-    sed -i '/^\[app\]/a android.accept_sdk_license = True' ChessAI/buildozer.spec
+          mv ChessAI_CHECKMATE_resolved/ChessAI ChessAI
 
-    echo "Final Buildozer configuration:"
-    grep -E "requirements|p4a.branch|android.api|android.ndk|android.accept_sdk_license" ChessAI/buildozer.spec || true
+          echo "ChessAI directory:"
+          ls -la ChessAI
+
+          echo "Checking buildozer.spec..."
+          test -f ChessAI/buildozer.spec
+
+          echo "Configuring Buildozer..."
+
+          sed -i '/^\[app\]/a android.accept_sdk_license = True' ChessAI/buildozer.spec
+
+          echo "Final Buildozer configuration:"
+          grep -E "requirements|p4a.branch|android.api|android.minapi|android.ndk|android.archs|android.accept_sdk_license" ChessAI/buildozer.spec || true
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -70,7 +79,11 @@ jobs:
 
       - name: Install Android SDK tools
         run: |
+          echo "Accepting Android SDK licenses..."
+
           yes | sdkmanager --licenses >/dev/null || true
+
+          echo "Installing Android SDK components..."
 
           sdkmanager \
             "platform-tools" \
@@ -95,7 +108,9 @@ jobs:
       - name: Install Buildozer
         run: |
           python -m pip install --upgrade pip
+
           pip install buildozer
+
           pip install "cython==0.29.34"
 
       - name: Verify Build Environment
@@ -107,6 +122,10 @@ jobs:
           echo "======================================"
           echo "Python:"
           python --version
+
+          echo "======================================"
+          echo "Pip:"
+          pip --version
 
           echo "======================================"
           echo "Buildozer:"
@@ -123,11 +142,31 @@ jobs:
           echo "======================================"
           echo "Build environment verified."
 
+      - name: Verify ChessAI project
+        working-directory: ChessAI
+        run: |
+          echo "ChessAI project contents:"
+          ls -la
+
+          echo "======================================"
+          echo "buildozer.spec requirements:"
+          grep "^requirements" buildozer.spec || true
+
+          echo "======================================"
+          echo "Android configuration:"
+          grep -E "^android\.(api|minapi|ndk|archs|enable_androidx)" buildozer.spec || true
+
+          echo "======================================"
+          echo "Main Python files:"
+          find . -maxdepth 2 -name "*.py" -type f | head -30
+
       - name: Clean previous Android build
         working-directory: ChessAI
         run: |
           rm -rf .buildozer
           rm -rf bin
+
+          echo "Previous Android build files removed."
 
       - name: Build APK
         working-directory: ChessAI
@@ -137,7 +176,9 @@ jobs:
 
           export PATH="$ANDROID_HOME/platform-tools:$ANDROID_HOME/build-tools/33.0.2:$PATH"
 
+          echo "======================================"
           echo "Starting Buildozer Android build..."
+          echo "======================================"
 
           buildozer android debug
 
@@ -145,6 +186,10 @@ jobs:
         if: success()
         working-directory: ChessAI
         run: |
+          echo "======================================"
+          echo "Build completed successfully!"
+          echo "======================================"
+
           echo "Generated APK files:"
           ls -lah bin/
 
