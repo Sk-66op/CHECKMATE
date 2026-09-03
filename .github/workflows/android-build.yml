@@ -22,41 +22,36 @@ jobs:
           ls -la ChessAI_CHECKMATE_resolved
 
           rm -rf ChessAI
+
           mv ChessAI_CHECKMATE_resolved/ChessAI ChessAI
 
           echo "ChessAI directory:"
           ls -la ChessAI
 
-          echo "Checking buildozer.spec..."
           test -f ChessAI/buildozer.spec
-          
-          echo "Original buildozer.spec (relevant sections):"
-          grep -E "python|version" ChessAI/buildozer.spec | head -20
 
+      - name: Configure Buildozer
+        working-directory: ChessAI
+        run: |
           echo "Configuring Buildozer..."
 
-          sed -i '/^\[app\]/a android.accept_sdk_license = True' ChessAI/buildozer.spec
+          sed -i '/^\[app\]/a android.accept_sdk_license = True' buildozer.spec
 
-          # 🔧 FIX: Downgrade Kivy to 2.2.1 + KivyMD to 1.1.1
-          sed -i 's/kivy==2.3.1/kivy==2.2.1/g' ChessAI/buildozer.spec
-          sed -i 's/kivy==2.3.0/kivy==2.2.1/g' ChessAI/buildozer.spec
-          sed -i 's/kivymd==1.2.0/kivymd==1.1.1/g' ChessAI/buildozer.spec
+          # Force Buildozer to use a known Python-3.11-era
+          # python-for-android release instead of the current
+          # release which defaults to Python 3.14.
+          sed -i '/^p4a.branch/d' buildozer.spec
+          sed -i '/^p4a.commit/d' buildozer.spec
 
-          # 🔧 FIX: Force Python 3.11 for Android build
-          # Try multiple possible setting names
-          sed -i 's/^android\.pythonVersion.*$/android.pythonVersion = 3.11/' ChessAI/buildozer.spec || true
-          sed -i 's/^python\.version.*$/python.version = 3.11/' ChessAI/buildozer.spec || true
-          
-          # If neither exists, add it after [app] section
-          if ! grep -q "pythonVersion\|python.version" ChessAI/buildozer.spec; then
-            sed -i '/^\[app\]/a android.pythonVersion = 3.11' ChessAI/buildozer.spec
-          fi
+          cat >> buildozer.spec <<'EOF'
 
-          echo "Final Buildozer configuration (Python settings):"
-          grep -E "pythonVersion|python.version" ChessAI/buildozer.spec || echo "⚠️  No python version setting found - using default"
-          
-          echo "All app settings:"
-          sed -n '/^\[app\]/,/^\[.*\]/p' ChessAI/buildozer.spec | head -30
+          # Pin python-for-android to the Python 3.11 era.
+          p4a.branch = master
+          p4a.commit = v2024.1.21
+          EOF
+
+          echo "Final p4a configuration:"
+          grep -E "^p4a\.(branch|commit)" buildozer.spec
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -127,8 +122,6 @@ jobs:
 
           pip install buildozer
 
-          pip install "cython<3.1"
-
       - name: Verify Build Environment
         run: |
           echo "======================================"
@@ -152,10 +145,6 @@ jobs:
           echo "$ANDROID_HOME"
 
           echo "======================================"
-          echo "AIDL:"
-          "$ANDROID_HOME/build-tools/33.0.2/aidl" 2>&1 | head -20 || true
-
-          echo "======================================"
           echo "Build environment verified."
 
       - name: Verify ChessAI project
@@ -170,7 +159,11 @@ jobs:
 
           echo "======================================"
           echo "Python version setting:"
-          grep -E "pythonVersion|python\.version" buildozer.spec || echo "⚠️  Not found"
+          grep "android.pythonVersion" buildozer.spec || true
+
+          echo "======================================"
+          echo "p4a configuration:"
+          grep -E "^p4a\.(branch|commit)" buildozer.spec || true
 
           echo "======================================"
           echo "Android configuration:"
@@ -202,16 +195,18 @@ jobs:
 
           buildozer android debug
 
-      - name: List generated APK
+      - name: Verify generated APK
         if: success()
         working-directory: ChessAI
         run: |
           echo "======================================"
-          echo "Build completed successfully!"
+          echo "BUILD COMPLETED SUCCESSFULLY!"
           echo "======================================"
 
           echo "Generated APK files:"
           ls -lah bin/
+
+          test -n "$(find bin -name '*.apk' -type f)"
 
       - name: Upload APK
         if: success()
