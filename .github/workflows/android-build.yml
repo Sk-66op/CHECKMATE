@@ -22,7 +22,6 @@ jobs:
           ls -la ChessAI_CHECKMATE_resolved
 
           rm -rf ChessAI
-
           mv ChessAI_CHECKMATE_resolved/ChessAI ChessAI
 
           echo "ChessAI directory:"
@@ -30,28 +29,24 @@ jobs:
 
           test -f ChessAI/buildozer.spec
 
-      - name: Configure Buildozer
-        working-directory: ChessAI
-        run: |
           echo "Configuring Buildozer..."
 
-          sed -i '/^\[app\]/a android.accept_sdk_license = True' buildozer.spec
+          sed -i '/^\[app\]/a android.accept_sdk_license = True' ChessAI/buildozer.spec
 
-          # Force Buildozer to use a known Python-3.11-era
-          # python-for-android release instead of the current
-          # release which defaults to Python 3.14.
-          sed -i '/^p4a.branch/d' buildozer.spec
-          sed -i '/^p4a.commit/d' buildozer.spec
+          # Force Python-for-Android to use the Python 3.11-compatible
+          # v2024.01.21 release directly.
+          sed -i '/^p4a\.branch[[:space:]]*=/d' ChessAI/buildozer.spec
+          sed -i '/^p4a\.commit[[:space:]]*=/d' ChessAI/buildozer.spec
+          sed -i '/^android\.pythonVersion[[:space:]]*=/d' ChessAI/buildozer.spec
 
-          cat >> buildozer.spec <<'EOF'
+          cat >> ChessAI/buildozer.spec <<'EOF'
 
-          # Pin python-for-android to the Python 3.11 era.
-          p4a.branch = master
-          p4a.commit = v2024.1.21
+          p4a.branch = v2024.01.21
+          p4a.commit = HEAD
           EOF
 
-          echo "Final p4a configuration:"
-          grep -E "^p4a\.(branch|commit)" buildozer.spec
+          echo "Final Buildozer configuration:"
+          grep -E "requirements|p4a.branch|p4a.commit|android.api|android.minapi|android.ndk|android.archs|android.accept_sdk_license|android.pythonVersion" ChessAI/buildozer.spec || true
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -61,23 +56,10 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update
-
           sudo apt-get install -y \
-            git \
-            zip \
-            unzip \
-            openjdk-17-jdk \
-            autoconf \
-            automake \
-            libtool \
-            pkg-config \
-            zlib1g-dev \
-            libncurses5-dev \
-            libncursesw5-dev \
-            libtinfo5 \
-            cmake \
-            libffi-dev \
-            libssl-dev
+            git zip unzip openjdk-17-jdk autoconf automake libtool pkg-config \
+            zlib1g-dev libncurses5-dev libncursesw5-dev libtinfo5 cmake \
+            libffi-dev libssl-dev
 
       - name: Set up Java 17
         uses: actions/setup-java@v4
@@ -90,11 +72,7 @@ jobs:
 
       - name: Install Android SDK tools
         run: |
-          echo "Accepting Android SDK licenses..."
-
           yes | sdkmanager --licenses >/dev/null || true
-
-          echo "Installing Android SDK components..."
 
           sdkmanager \
             "platform-tools" \
@@ -107,70 +85,42 @@ jobs:
           echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
           echo "$ANDROID_HOME/build-tools/33.0.2" >> "$GITHUB_PATH"
 
-          echo "Android SDK:"
-          echo "$ANDROID_HOME"
-
-          echo "Checking AIDL..."
-
           test -x "$ANDROID_HOME/build-tools/33.0.2/aidl"
-
-          echo "AIDL found successfully!"
 
       - name: Install Buildozer
         run: |
           python -m pip install --upgrade pip
-
           pip install buildozer
+          pip install "cython==0.29.34"
 
       - name: Verify Build Environment
         run: |
-          echo "======================================"
-          echo "Java:"
           java -version
-
-          echo "======================================"
-          echo "Python:"
           python --version
-
-          echo "======================================"
-          echo "Pip:"
           pip --version
-
-          echo "======================================"
-          echo "Buildozer:"
           buildozer --version
-
-          echo "======================================"
-          echo "Android SDK:"
           echo "$ANDROID_HOME"
 
-          echo "======================================"
-          echo "Build environment verified."
+          "$ANDROID_HOME/build-tools/33.0.2/aidl" 2>&1 | head -20 || true
 
       - name: Verify ChessAI project
         working-directory: ChessAI
         run: |
-          echo "ChessAI project contents:"
           ls -la
 
-          echo "======================================"
-          echo "buildozer.spec requirements:"
+          echo "Requirements:"
           grep "^requirements" buildozer.spec || true
 
-          echo "======================================"
-          echo "Python version setting:"
-          grep "android.pythonVersion" buildozer.spec || true
-
-          echo "======================================"
-          echo "p4a configuration:"
-          grep -E "^p4a\.(branch|commit)" buildozer.spec || true
-
-          echo "======================================"
           echo "Android configuration:"
           grep -E "^android\.(api|minapi|ndk|archs|enable_androidx)" buildozer.spec || true
 
-          echo "======================================"
-          echo "Main Python files:"
+          echo "Python-for-Android configuration:"
+          grep -E "^p4a\.(branch|commit|source_dir)" buildozer.spec || true
+
+          echo "Python version override:"
+          grep "^android\.pythonVersion" buildozer.spec || true
+
+          echo "Python files:"
           find . -maxdepth 2 -name "*.py" -type f | head -30
 
       - name: Clean previous Android build
@@ -179,34 +129,29 @@ jobs:
           rm -rf .buildozer
           rm -rf bin
 
-          echo "Previous Android build files removed."
+      - name: Verify Python-for-Android version
+        working-directory: ChessAI
+        run: |
+          echo "Python-for-Android will be pinned to:"
+          grep -E "^p4a\.(branch|commit)" buildozer.spec
+
+          test "$(grep '^p4a.branch' buildozer.spec | awk '{print $3}')" = "v2024.01.21"
+          test "$(grep '^p4a.commit' buildozer.spec | awk '{print $3}')" = "HEAD"
 
       - name: Build APK
         working-directory: ChessAI
         run: |
           export ANDROIDSDK="$ANDROID_HOME"
           export ANDROID_SDK_ROOT="$ANDROID_HOME"
-
           export PATH="$ANDROID_HOME/platform-tools:$ANDROID_HOME/build-tools/33.0.2:$PATH"
-
-          echo "======================================"
-          echo "Starting Buildozer Android build..."
-          echo "======================================"
 
           buildozer android debug
 
-      - name: Verify generated APK
+      - name: List generated APK
         if: success()
         working-directory: ChessAI
         run: |
-          echo "======================================"
-          echo "BUILD COMPLETED SUCCESSFULLY!"
-          echo "======================================"
-
-          echo "Generated APK files:"
           ls -lah bin/
-
-          test -n "$(find bin -name '*.apk' -type f)"
 
       - name: Upload APK
         if: success()
