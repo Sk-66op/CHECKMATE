@@ -37,7 +37,12 @@ jobs:
 
           sed -i '/^\[app\]/a android.accept_sdk_license = True' ChessAI/buildozer.spec
 
-          # 🔧 FIX: Force Python 3.11 for Android build (Kivy 2.3.0 incompatible with Python 3.14)
+          # 🔧 FIX: Downgrade Kivy to 2.2.1 + KivyMD to 1.1.1
+          sed -i 's/kivy==2.3.1/kivy==2.2.1/g' ChessAI/buildozer.spec
+          sed -i 's/kivy==2.3.0/kivy==2.2.1/g' ChessAI/buildozer.spec
+          sed -i 's/kivymd==1.2.0/kivymd==1.1.1/g' ChessAI/buildozer.spec
+
+          # 🔧 FIX: Force Python 3.11 for Android build
           # Try multiple possible setting names
           sed -i 's/^android\.pythonVersion.*$/android.pythonVersion = 3.11/' ChessAI/buildozer.spec || true
           sed -i 's/^python\.version.*$/python.version = 3.11/' ChessAI/buildozer.spec || true
