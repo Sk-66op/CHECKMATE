@@ -39,11 +39,9 @@ jobs:
           sed -i '/^p4a\.commit[[:space:]]*=/d' ChessAI/buildozer.spec
           sed -i '/^android\.pythonVersion[[:space:]]*=/d' ChessAI/buildozer.spec
 
-          cat >> ChessAI/buildozer.spec <<'EOF'
-
-          p4a.branch = v2024.01.21
-          p4a.commit = HEAD
-          EOF
+          # Insert directly under [app] so buildozer actually reads them
+          # (appending to end-of-file would land under [buildozer] and be ignored)
+          sed -i '/^\[app\]/a p4a.branch = v2024.01.21\np4a.commit = HEAD' ChessAI/buildozer.spec
 
           echo "Final Buildozer configuration:"
           grep -E "requirements|p4a.branch|p4a.commit|android.api|android.minapi|android.ndk|android.archs|android.accept_sdk_license|android.pythonVersion" ChessAI/buildozer.spec || true
@@ -134,6 +132,9 @@ jobs:
         run: |
           echo "Python-for-Android will be pinned to:"
           grep -E "^p4a\.(branch|commit)" buildozer.spec
+
+          # Confirm the pin actually landed inside [app], not [buildozer]
+          awk '/^\[app\]/{f=1} /^\[buildozer\]/{f=0} f && /^p4a\.branch/{found=1} END{exit !found}' buildozer.spec
 
           test "$(grep '^p4a.branch' buildozer.spec | awk '{print $3}')" = "v2024.01.21"
           test "$(grep '^p4a.commit' buildozer.spec | awk '{print $3}')" = "HEAD"
