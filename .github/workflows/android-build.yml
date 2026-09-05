@@ -15,14 +15,14 @@ jobs:
         run: |
           echo "Extracting ChessAI project..."
 
-          unzip -o ChessAI_CHECKMATE_resolved.zip
+          unzip -o ChessAI_CHECKMATE.zip
 
           echo "Contents after extraction:"
           ls -la
-          ls -la ChessAI_CHECKMATE_resolved
+          ls -la ChessAI_CHECKMATE
 
           rm -rf ChessAI
-          mv ChessAI_CHECKMATE_resolved/ChessAI ChessAI
+          mv ChessAI_CHECKMATE/ChessAI ChessAI
 
           echo "ChessAI directory:"
           ls -la ChessAI
