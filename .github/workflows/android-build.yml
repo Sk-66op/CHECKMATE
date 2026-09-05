@@ -11,7 +11,16 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Python 3.11
+      - name: Show repository structure
+        run: |
+          echo "===== CURRENT DIRECTORY ====="
+          pwd
+
+          echo ""
+          echo "===== REPOSITORY FILES ====="
+          find . -maxdepth 5 -type f | sort
+
+      - name: Setup Python 3.11
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -46,53 +55,94 @@ jobs:
           pip install buildozer
           pip install "Cython==0.29.34"
 
-      - name: Set project directory
+      - name: Find Buildozer project
+        id: project
+        shell: bash
         run: |
-          echo "PROJECT_DIR=ChessAI_CHECKMATE_resolved/ChessAI_CHECKMATE_resolved/ChessAI" >> "$GITHUB_ENV"
+          echo "===== SEARCHING FOR BUILDOZER.SPEC ====="
+
+          SPEC=$(find . -type f -name "buildozer.spec" -print -quit)
+
+          if [ -z "$SPEC" ]; then
+            echo "ERROR: buildozer.spec was NOT found."
+            echo ""
+            echo "===== ALL FILES ====="
+            find . -type f | sort
+            exit 1
+          fi
+
+          PROJECT_DIR=$(dirname "$SPEC")
+
+          echo "Buildozer spec found:"
+          echo "$SPEC"
+
+          echo ""
+          echo "Project directory:"
+          echo "$PROJECT_DIR"
+
+          echo "project_dir=$PROJECT_DIR" >> "$GITHUB_OUTPUT"
 
       - name: Verify project
+        working-directory: ${{ steps.project.outputs.project_dir }}
         run: |
-          echo "Project:"
+          echo "===== PROJECT DIRECTORY ====="
           pwd
+
           echo ""
-          echo "Files:"
-          ls -la "$PROJECT_DIR"
+          echo "===== PROJECT FILES ====="
+          find . -maxdepth 3 -type f | sort
+
           echo ""
-          echo "Checking buildozer.spec..."
-          test -f "$PROJECT_DIR/buildozer.spec"
-          echo "buildozer.spec FOUND!"
+          echo "===== REQUIRED FILE CHECK ====="
+
+          if [ ! -f "main.py" ]; then
+            echo "ERROR: main.py not found!"
+            exit 1
+          fi
+
+          if [ ! -f "buildozer.spec" ]; then
+            echo "ERROR: buildozer.spec not found!"
+            exit 1
+          fi
+
+          echo "main.py: FOUND"
+          echo "buildozer.spec: FOUND"
 
       - name: Clean previous build
-        working-directory: ${{ env.PROJECT_DIR }}
+        working-directory: ${{ steps.project.outputs.project_dir }}
         run: |
           rm -rf .buildozer
           rm -rf bin
 
       - name: Build APK
-        working-directory: ${{ env.PROJECT_DIR }}
+        working-directory: ${{ steps.project.outputs.project_dir }}
         env:
           BUILDOZER_WARN_ON_ROOT: "1"
         run: |
           buildozer android debug
 
-      - name: Show APK
-        working-directory: ${{ env.PROJECT_DIR }}
+      - name: Check APK
+        working-directory: ${{ steps.project.outputs.project_dir }}
         run: |
-          echo "===== APK ====="
+          echo "===== BIN DIRECTORY ====="
           ls -lah bin/
+
+          echo ""
+          echo "===== GENERATED APK ====="
+          find bin -type f -name "*.apk" -print
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: ChessAI-APK
-          path: ${{ env.PROJECT_DIR }}/bin/*.apk
+          path: ${{ steps.project.outputs.project_dir }}/bin/*.apk
           if-no-files-found: error
 
-      - name: Upload build logs if failed
+      - name: Upload Build Logs
         if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: ChessAI-Build-Logs
           path: |
-            ${{ env.PROJECT_DIR }}/.buildozer/
+            ${{ steps.project.outputs.project_dir }}/.buildozer/
           if-no-files-found: ignore
