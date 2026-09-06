@@ -19,31 +19,20 @@ jobs:
           echo "=== Current structure ==="
           ls -la
           
-          # Check for ZIP files
           ZIP_FILE=$(find . -name "*.zip" | head -1)
           if [ -n "$ZIP_FILE" ]; then
             echo "✅ Found ZIP file: $ZIP_FILE"
-            echo "Extracting..."
             unzip -o "$ZIP_FILE"
-            echo "Extraction complete!"
-            
-            # Move extracted contents to root if needed
             for dir in */; do
               if [ -f "${dir}main.py" ] || [ -f "${dir}buildozer.spec" ]; then
                 echo "Found project files in: $dir"
                 cp -r "${dir}"* .
               fi
             done
-          else
-            echo "No ZIP file found, assuming files are already extracted"
           fi
           
-          echo ""
           echo "=== Final structure ==="
           ls -la
-          echo ""
-          echo "=== Checking for main.py ==="
-          find . -name "main.py"
           echo ""
           echo "=== Checking for buildozer.spec ==="
           find . -name "buildozer.spec"
@@ -54,10 +43,10 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - name: Set up Python 3.10
+      - name: Set up Python 3.9
         uses: actions/setup-python@v5
         with:
-          python-version: "3.10"
+          python-version: "3.9"
 
       - name: Install system dependencies
         run: |
@@ -67,7 +56,8 @@ jobs:
             autoconf automake libtool pkg-config \
             zlib1g-dev libncurses5-dev libncursesw5-dev \
             cmake libffi-dev libssl-dev gettext autopoint \
-            openjdk-17-jdk python3-dev build-essential
+            openjdk-17-jdk python3-dev build-essential \
+            wget
 
       - name: Install Python build tools
         run: |
@@ -76,7 +66,6 @@ jobs:
 
       - name: Build APK
         run: |
-          # Find the directory with buildozer.spec
           SPEC_DIR=$(find . -name "buildozer.spec" -exec dirname {} \; | head -1)
           if [ -z "$SPEC_DIR" ]; then
             echo "❌ buildozer.spec not found!"
@@ -84,8 +73,16 @@ jobs:
           fi
           echo "Building in: $SPEC_DIR"
           cd "$SPEC_DIR"
+          
+          # Build with verbose output
           buildozer -v android debug
-        timeout-minutes: 45
+        timeout-minutes: 50
+        env:
+          # Let Buildozer handle the SDK setup
+          P4A_RELEASE_KEYSTORE: /dev/null
+          P4A_RELEASE_KEYSTORE_PASSWD: /dev/null
+          P4A_RELEASE_KEYALIAS: /dev/null
+          P4A_RELEASE_KEYALIAS_PASSWD: /dev/null
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
