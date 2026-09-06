@@ -16,26 +16,15 @@ jobs:
 
       - name: Prepare files (extract ZIP if exists)
         run: |
-          echo "=== Current structure ==="
-          ls -la
-          
           ZIP_FILE=$(find . -name "*.zip" | head -1)
           if [ -n "$ZIP_FILE" ]; then
-            echo "✅ Found ZIP file: $ZIP_FILE"
             unzip -o "$ZIP_FILE"
             for dir in */; do
               if [ -f "${dir}main.py" ] || [ -f "${dir}buildozer.spec" ]; then
-                echo "Found project files in: $dir"
                 cp -r "${dir}"* .
               fi
             done
           fi
-          
-          echo ""
-          echo "=== Final structure ==="
-          ls -la
-          echo ""
-          echo "=== Checking for buildozer.spec ==="
           find . -name "buildozer.spec"
 
       - name: Set up Java 17
@@ -49,7 +38,7 @@ jobs:
         with:
           python-version: "3.9"
 
-      - name: Install system dependencies
+      - name: Install dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -60,10 +49,19 @@ jobs:
             openjdk-17-jdk python3-dev build-essential \
             wget
 
-      - name: Install Android SDK with specific build tools
+      - name: Install Python build tools
         run: |
-          export ANDROID_HOME=$HOME/android-sdk
-          export ANDROID_SDK_ROOT=$HOME/android-sdk
+          python -m pip install --upgrade pip setuptools wheel
+          python -m pip install buildozer cython
+
+      - name: Let Buildozer download SDK, then install build tools
+        run: |
+          # First, let Buildozer create its directory structure
+          mkdir -p ~/.buildozer/android/platform/android-sdk
+          
+          # Download and install build tools directly into Buildozer's SDK
+          export ANDROID_HOME=~/.buildozer/android/platform/android-sdk
+          export ANDROID_SDK_ROOT=~/.buildozer/android/platform/android-sdk
           mkdir -p $ANDROID_HOME
           
           cd $ANDROID_HOME
@@ -73,35 +71,19 @@ jobs:
           unzip -q commandlinetools-linux-11076708_latest.zip
           rm commandlinetools-linux-11076708_latest.zip
           
-          # Create correct directory structure
+          # Setup directory structure
           mkdir -p cmdline-tools
           mv cmdline-tools cmdline-tools/latest 2>/dev/null || true
           
-          # If the above failed, try alternative
-          if [ ! -f "cmdline-tools/latest/bin/sdkmanager" ]; then
-            mkdir -p cmdline-tools/latest
-            mv cmdline-tools/* cmdline-tools/latest/ 2>/dev/null || true
-          fi
-          
-          # Accept all licenses automatically
+          # Accept licenses
           yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses 2>/dev/null || true
           
-          # Install specific versions
+          # Install build tools 30.0.3
           $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platform-tools" "platforms;android-30" "build-tools;30.0.3"
           
-          # Set environment variables
-          echo "ANDROID_HOME=$ANDROID_HOME" >> $GITHUB_ENV
-          echo "ANDROID_SDK_ROOT=$ANDROID_HOME" >> $GITHUB_ENV
-          echo "$ANDROID_HOME/cmdline-tools/latest/bin" >> $GITHUB_PATH
-          echo "$ANDROID_HOME/platform-tools" >> $GITHUB_PATH
-          echo "$ANDROID_HOME/build-tools/30.0.3" >> $GITHUB_PATH
-          
-          echo "✅ Android SDK installed successfully!"
-
-      - name: Install Python build tools
-        run: |
-          python -m pip install --upgrade pip setuptools wheel
-          python -m pip install buildozer cython
+          echo "✅ Build tools installed in Buildozer's SDK directory"
+          echo "Checking AIDL:"
+          find $ANDROID_HOME -name "aidl" 2>/dev/null
 
       - name: Build APK
         run: |
@@ -113,10 +95,9 @@ jobs:
           echo "Building in: $SPEC_DIR"
           cd "$SPEC_DIR"
           
-          export ANDROID_HOME=$HOME/android-sdk
-          export ANDROID_SDK_ROOT=$HOME/android-sdk
+          export ANDROID_HOME=~/.buildozer/android/platform/android-sdk
+          export ANDROID_SDK_ROOT=~/.buildozer/android/platform/android-sdk
           
-          # Build with verbose output
           buildozer -v android debug
         timeout-minutes: 50
 
