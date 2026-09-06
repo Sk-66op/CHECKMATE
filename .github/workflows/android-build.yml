@@ -2,14 +2,11 @@ name: Build Android APK
 
 on:
   workflow_dispatch:
-  push:
-    branches: [ main, master ]
 
 jobs:
   build:
-    name: Build APK
     runs-on: ubuntu-22.04
-
+    
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -33,7 +30,7 @@ jobs:
         uses: actions/setup-java@v3
         with:
           distribution: 'temurin'
-          java-version: '17'
+          java-version: '11'
 
       - name: Install System Dependencies
         run: |
@@ -43,27 +40,103 @@ jobs:
             autoconf automake libtool pkg-config \
             zlib1g-dev libncurses5-dev libncursesw5-dev \
             cmake libffi-dev libssl-dev \
-            openjdk-17-jdk python3-dev \
-            build-essential
+            openjdk-11-jdk python3-dev \
+            build-essential wget
 
-      - name: Install Python Packages
+      - name: Install Cython and Buildozer
         run: |
           python -m pip install --upgrade pip setuptools wheel
           python -m pip install cython==0.29.33
           python -m pip install buildozer==1.4.0
 
-      - name: Verify Installation
+      - name: Verify Installations
         run: |
-          python -c "import cython; print(f'Cython version: {cython.__version__}')"
-          python -c "import buildozer; print(f'Buildozer version: {buildozer.__version__}')"
+          python -c "import cython; print(f'Cython {cython.__version__} installed')"
+          python -c "import buildozer; print('Buildozer installed')"
 
-      - name: Initialize Buildozer
+      - name: Create buildozer.spec
         run: |
-          buildozer init 2>/dev/null || true
+          cat > buildozer.spec << 'EOF'
+          [app]
+          title = Checkmate
+          package.name = checkmate
+          package.domain = org.miniproject
+          
+          source.dir = .
+          source.include_exts = py,png,jpg,jpeg,kv,atlas,json,ttf
+          
+          version = 1.0
+          requirements = python3,kivy==2.0.0,kivymd==1.0.0,chess==1.10.0,pillow
+          
+          orientation = portrait
+          fullscreen = 0
+          
+          android.permissions = INTERNET
+          android.api = 29
+          android.minapi = 21
+          android.ndk = 21d
+          android.archs = armeabi-v7a
+          android.allow_backup = True
+          android.enable_androidx = True
+          
+          [buildozer]
+          log_level = 2
+          warn_on_root = 1
+          EOF
+
+      - name: Pre-install AIDL and Build Tools
+        run: |
+          # Create Android SDK directory
+          export ANDROID_HOME=$HOME/android-sdk
+          export ANDROID_SDK_ROOT=$HOME/android-sdk
+          mkdir -p $ANDROID_HOME
+          
+          cd $ANDROID_HOME
+          
+          # Download command-line tools
+          wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
+          unzip -q commandlinetools-linux-11076708_latest.zip
+          rm commandlinetools-linux-11076708_latest.zip
+          
+          # Setup directory structure correctly
+          mkdir -p cmdline-tools
+          mv cmdline-tools cmdline-tools/latest 2>/dev/null || true
+          
+          # If the move failed, try alternative
+          if [ ! -f "cmdline-tools/latest/bin/sdkmanager" ]; then
+            mkdir -p cmdline-tools/latest
+            mv cmdline-tools/* cmdline-tools/latest/ 2>/dev/null || true
+          fi
+          
+          # Accept licenses
+          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses 2>/dev/null || true
+          
+          # Install specific build tools that include AIDL
+          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platform-tools" "platforms;android-29" "build-tools;29.0.3"
+          
+          # Set environment variables
+          echo "ANDROID_HOME=$ANDROID_HOME" >> $GITHUB_ENV
+          echo "ANDROID_SDK_ROOT=$ANDROID_HOME" >> $GITHUB_ENV
+          echo "$ANDROID_HOME/cmdline-tools/latest/bin" >> $GITHUB_PATH
+          echo "$ANDROID_HOME/platform-tools" >> $GITHUB_PATH
+          echo "$ANDROID_HOME/build-tools/29.0.3" >> $GITHUB_PATH
+          
+          # Create symlink for AIDL
+          if [ -f "$ANDROID_HOME/build-tools/29.0.3/aidl" ]; then
+            sudo ln -sf $ANDROID_HOME/build-tools/29.0.3/aidl /usr/local/bin/aidl
+            echo "✅ AIDL symlink created"
+          fi
+          
+          echo "✅ Android SDK and AIDL installed"
 
       - name: Build APK
         run: |
-          buildozer android debug
+          export ANDROID_HOME=$HOME/android-sdk
+          export ANDROID_SDK_ROOT=$HOME/android-sdk
+          export PATH=$ANDROID_HOME/build-tools/29.0.3:$PATH
+          export PATH=$ANDROID_HOME/platform-tools:$PATH
+          
+          echo "y" | buildozer android debug
         timeout-minutes: 60
 
       - name: Upload APK
@@ -71,4 +144,3 @@ jobs:
         with:
           name: Checkmate-APK
           path: bin/*.apk
-          if-no-files-found: error
