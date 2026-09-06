@@ -1,4 +1,4 @@
-name: Build Checkmate Android APK
+name: Build Android APK
 
 on:
   workflow_dispatch:
@@ -7,42 +7,58 @@ on:
 
 jobs:
   build:
-    name: Build Checkmate APK
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     
-    container:
-      image: kivy/buildozer:latest
-
     steps:
-      - name: Checkout repository
+      - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Prepare files (extract ZIP if exists)
+      - name: Extract ZIP if exists
         run: |
-          ZIP_FILE=$(find . -name "*.zip" | head -1)
-          if [ -n "$ZIP_FILE" ]; then
-            unzip -o "$ZIP_FILE"
-            for dir in */; do
-              if [ -f "${dir}main.py" ] || [ -f "${dir}buildozer.spec" ]; then
-                cp -r "${dir}"* .
-                break
-              fi
-            done
+          if [ -f "*.zip" ]; then
+            unzip -o *.zip
+          fi
+          # Move files to root if needed
+          if [ -d "CHECKMATE/ChessAI" ]; then
+            cp -r CHECKMATE/ChessAI/* .
           fi
           ls -la
 
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: Setup Java
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Install Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            git zip unzip \
+            autoconf automake libtool pkg-config \
+            zlib1g-dev libncurses5-dev libncursesw5-dev \
+            cmake libffi-dev libssl-dev gettext autopoint \
+            openjdk-17-jdk python3-dev build-essential \
+            wget
+
+      - name: Install Buildozer
+        run: |
+          pip install --upgrade pip
+          pip install buildozer
+          pip install cython
+
       - name: Build APK
         run: |
-          SPEC_DIR=$(find . -name "buildozer.spec" -exec dirname {} \; | head -1)
-          cd "$SPEC_DIR"
-          # Answer yes to root warning
           echo "y" | buildozer android debug
         timeout-minutes: 60
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: Checkmate-debug-apk
-          path: |
-            **/bin/*.apk
-          if-no-files-found: error
+          name: Checkmate-APK
+          path: bin/*.apk
