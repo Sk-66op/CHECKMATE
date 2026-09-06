@@ -6,12 +6,9 @@ on:
 jobs:
   build:
     runs-on: ubuntu-22.04
-    container:
-      image: kivy/buildozer:latest
-
+    
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Extract ZIP
         run: |
@@ -23,28 +20,50 @@ jobs:
           fi
           ls -la
 
-      - name: Install Cython
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: Setup Java
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'temurin'
+          java-version: '11'
+
+      - name: Install System Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            git zip unzip \
+            autoconf automake libtool pkg-config \
+            zlib1g-dev libncurses5-dev libncursesw5-dev \
+            cmake libffi-dev libssl-dev \
+            openjdk-11-jdk python3-dev \
+            build-essential wget
+
+      - name: Install Python Packages
         run: |
           pip install --upgrade pip
           pip install cython==0.29.33
+          pip install buildozer==1.4.0
 
-      - name: Install AIDL and Build Tools
+      - name: MANUAL AIDL INSTALLATION
         run: |
-          apt-get update
-          apt-get install -y wget unzip
+          echo "=== Installing Android SDK with AIDL ==="
           
-          export ANDROID_HOME=/android
-          export ANDROID_SDK_ROOT=/android
+          export ANDROID_HOME=$HOME/android-sdk
+          export ANDROID_SDK_ROOT=$HOME/android-sdk
           mkdir -p $ANDROID_HOME
           
           cd $ANDROID_HOME
           
-          # Download SDK tools
+          # Download command-line tools
           wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
           unzip -q commandlinetools-linux-11076708_latest.zip
           rm commandlinetools-linux-11076708_latest.zip
           
-          # Setup correct structure
+          # Setup directory structure
           mkdir -p cmdline-tools
           mv cmdline-tools cmdline-tools/latest 2>/dev/null || true
           
@@ -56,15 +75,35 @@ jobs:
           # Accept licenses
           yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses 2>/dev/null || true
           
-          # Install build tools
-          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platform-tools" "platforms;android-29" "build-tools;29.0.3"
+          # Install build tools 30.0.3 (contains AIDL)
+          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platform-tools" "platforms;android-30" "build-tools;30.0.3"
+          
+          # Create symlink for AIDL
+          if [ -f "$ANDROID_HOME/build-tools/30.0.3/aidl" ]; then
+            sudo ln -sf $ANDROID_HOME/build-tools/30.0.3/aidl /usr/local/bin/aidl
+            echo "✅ AIDL symlink created at /usr/local/bin/aidl"
+          fi
+          
+          # Also copy to standard location
+          if [ -f "$ANDROID_HOME/build-tools/30.0.3/aidl" ]; then
+            sudo cp $ANDROID_HOME/build-tools/30.0.3/aidl /usr/bin/aidl
+            echo "✅ AIDL copied to /usr/bin/aidl"
+          fi
+          
+          # Verify
+          echo ""
+          echo "=== AIDL Verification ==="
+          ls -la $ANDROID_HOME/build-tools/30.0.3/aidl || echo "AIDL not found in build-tools"
+          which aidl || echo "AIDL not in PATH"
+          aidl --version 2>/dev/null || echo "AIDL installed but may not have version flag"
           
           # Set environment
-          echo "ANDROID_HOME=/android" >> $GITHUB_ENV
-          echo "ANDROID_SDK_ROOT=/android" >> $GITHUB_ENV
-          echo "/android/build-tools/29.0.3" >> $GITHUB_PATH
+          echo "ANDROID_HOME=$ANDROID_HOME" >> $GITHUB_ENV
+          echo "ANDROID_SDK_ROOT=$ANDROID_HOME" >> $GITHUB_ENV
+          echo "$ANDROID_HOME/build-tools/30.0.3" >> $GITHUB_PATH
+          echo "$ANDROID_HOME/platform-tools" >> $GITHUB_PATH
           
-          echo "✅ AIDL installed"
+          echo "✅ Android SDK with AIDL installed successfully"
 
       - name: Create buildozer.spec
         run: |
@@ -80,22 +119,28 @@ jobs:
           orientation = portrait
           fullscreen = 0
           android.permissions = INTERNET
-          android.api = 29
+          android.api = 30
           android.minapi = 21
-          android.ndk = 21d
-          android.archs = armeabi-v7a
+          android.ndk = 23b
+          android.archs = arm64-v8a, armeabi-v7a
           android.allow_backup = True
           android.enable_androidx = True
+          android.sdk_path = $HOME/android-sdk
           [buildozer]
           log_level = 2
-          warn_on_root = 0
+          warn_on_root = 1
           EOF
 
       - name: Build APK
         run: |
-          export ANDROID_HOME=/android
-          export ANDROID_SDK_ROOT=/android
-          buildozer android debug
+          export ANDROID_HOME=$HOME/android-sdk
+          export ANDROID_SDK_ROOT=$HOME/android-sdk
+          export PATH=$ANDROID_HOME/build-tools/30.0.3:$PATH
+          
+          echo "=== PATH contains AIDL ==="
+          which aidl
+          
+          echo "y" | buildozer android debug
         timeout-minutes: 60
 
       - name: Upload APK
