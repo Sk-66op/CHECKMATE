@@ -3,9 +3,7 @@ name: Build Checkmate Android APK
 on:
   workflow_dispatch:
   push:
-    paths:
-      - "ChessAI/**"
-      - ".github/workflows/android-build.yml"
+    branches: [ main, master ]
 
 jobs:
   build:
@@ -16,19 +14,39 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Debug - Show structure
+      - name: Prepare files (extract ZIP if exists)
         run: |
-          echo "Current directory: $(pwd)"
-          echo "Root contents:"
+          echo "=== Current structure ==="
+          ls -la
+          
+          # Check for ZIP files
+          ZIP_FILE=$(find . -name "*.zip" | head -1)
+          if [ -n "$ZIP_FILE" ]; then
+            echo "✅ Found ZIP file: $ZIP_FILE"
+            echo "Extracting..."
+            unzip -o "$ZIP_FILE"
+            echo "Extraction complete!"
+            
+            # Move extracted contents to root if needed
+            for dir in */; do
+              if [ -f "${dir}main.py" ] || [ -f "${dir}buildozer.spec" ]; then
+                echo "Found project files in: $dir"
+                cp -r "${dir}"* .
+              fi
+            done
+          else
+            echo "No ZIP file found, assuming files are already extracted"
+          fi
+          
+          echo ""
+          echo "=== Final structure ==="
           ls -la
           echo ""
-          echo "ChessAI contents:"
-          if [ -d "ChessAI" ]; then
-            ls -la ChessAI/
-          else
-            echo "❌ ChessAI directory not found!"
-            exit 1
-          fi
+          echo "=== Checking for main.py ==="
+          find . -name "main.py"
+          echo ""
+          echo "=== Checking for buildozer.spec ==="
+          find . -name "buildozer.spec"
 
       - name: Set up Java 17
         uses: actions/setup-java@v4
@@ -45,64 +63,34 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            git \
-            zip \
-            unzip \
-            autoconf \
-            automake \
-            libtool \
-            pkg-config \
-            zlib1g-dev \
-            libncurses5-dev \
-            libncursesw5-dev \
-            cmake \
-            libffi-dev \
-            libssl-dev \
-            gettext \
-            autopoint \
-            openjdk-17-jdk \
-            python3-dev \
-            build-essential
+            git zip unzip \
+            autoconf automake libtool pkg-config \
+            zlib1g-dev libncurses5-dev libncursesw5-dev \
+            cmake libffi-dev libssl-dev gettext autopoint \
+            openjdk-17-jdk python3-dev build-essential
 
       - name: Install Python build tools
         run: |
           python -m pip install --upgrade pip setuptools wheel
           python -m pip install buildozer cython
 
-      - name: Verify buildozer.spec
+      - name: Build APK
         run: |
-          cd ChessAI
-          echo "In ChessAI directory: $(pwd)"
-          echo "Files:"
-          ls -la
-          echo ""
-          if [ -f "buildozer.spec" ]; then
-            echo "✅ buildozer.spec found!"
-          else
-            echo "❌ buildozer.spec NOT found!"
+          # Find the directory with buildozer.spec
+          SPEC_DIR=$(find . -name "buildozer.spec" -exec dirname {} \; | head -1)
+          if [ -z "$SPEC_DIR" ]; then
+            echo "❌ buildozer.spec not found!"
             exit 1
           fi
-
-      - name: Build Checkmate APK
-        run: |
-          cd ChessAI
+          echo "Building in: $SPEC_DIR"
+          cd "$SPEC_DIR"
           buildozer -v android debug
         timeout-minutes: 45
 
-      - name: Verify APK
-        run: |
-          if [ -f "ChessAI/bin/checkmate-1.0-arm64-v8a-debug.apk" ] || [ -n "$(find ChessAI/bin -name '*.apk' 2>/dev/null)" ]; then
-            echo "✅ APK found!"
-            ls -lh ChessAI/bin/*.apk
-          else
-            echo "❌ No APK found!"
-            ls -la ChessAI/bin/ || echo "bin directory doesn't exist"
-            exit 1
-          fi
-
-      - name: Upload Checkmate APK
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: Checkmate-debug-apk
-          path: ChessAI/bin/*.apk
+          path: |
+            **/bin/*.apk
           if-no-files-found: error
