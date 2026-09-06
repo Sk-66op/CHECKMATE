@@ -2,7 +2,6 @@ name: Build Checkmate Android APK
 
 on:
   workflow_dispatch:
-
   push:
     paths:
       - "ChessAI/**"
@@ -13,13 +12,17 @@ jobs:
     name: Build Checkmate APK
     runs-on: ubuntu-22.04
 
-    defaults:
-      run:
-        working-directory: ChessAI
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Debug - Show structure
+        run: |
+          echo "Current directory: $(pwd)"
+          echo "Contents:"
+          ls -la
+          echo "ChessAI contents:"
+          ls -la ChessAI/ || echo "ChessAI directory not found!"
 
       - name: Set up Java 17
         uses: actions/setup-java@v4
@@ -33,7 +36,6 @@ jobs:
           python-version: "3.11"
 
       - name: Install system dependencies
-        working-directory: .
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -51,34 +53,46 @@ jobs:
             libffi-dev \
             libssl-dev \
             gettext \
-            autopoint
+            autopoint \
+            openjdk-17-jdk \
+            python3-dev
 
       - name: Install Python build tools
         run: |
           python -m pip install --upgrade pip setuptools wheel
           python -m pip install buildozer==1.5.0 cython==0.29.34
 
-      - name: Show project files
+      - name: Show project files (in ChessAI)
+        working-directory: ChessAI
         run: |
-          echo "Current directory:"
-          pwd
-          echo
+          echo "Current directory: $(pwd)"
           echo "Project files:"
           ls -la
-          echo
+          echo ""
           echo "Checking buildozer.spec:"
-          test -f buildozer.spec
-          echo "buildozer.spec found."
+          if [ -f "buildozer.spec" ]; then
+            echo "✅ buildozer.spec found!"
+            cat buildozer.spec | head -20
+          else
+            echo "❌ buildozer.spec NOT found!"
+            exit 1
+          fi
 
       - name: Build Checkmate APK
+        working-directory: ChessAI
         run: |
           buildozer -v android debug
+        timeout-minutes: 30
 
       - name: Verify APK
+        working-directory: ChessAI
         run: |
           echo "APK files:"
-          ls -lh bin/
-          test -n "$(find bin -name '*.apk' -print -quit)"
+          ls -lh bin/ || echo "No bin directory yet!"
+          if [ -d "bin" ]; then
+            find bin -name "*.apk" -exec ls -lh {} \;
+            test -n "$(find bin -name '*.apk' -print -quit)" || echo "No APK found!"
+          fi
 
       - name: Upload Checkmate APK
         uses: actions/upload-artifact@v4
