@@ -15,7 +15,6 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-
       # ==========================================
       # 2. EXTRACT PROJECT
       # ==========================================
@@ -40,7 +39,6 @@ jobs:
           else
             echo "No ZIP found."
           fi
-
 
       # ==========================================
       # 3. FIND BUILDOZER PROJECT
@@ -75,7 +73,6 @@ jobs:
           echo "=== Project ==="
           ls -la "$PROJECT_DIR"
 
-
       # ==========================================
       # 4. CLEAN PROJECT
       # ==========================================
@@ -99,15 +96,13 @@ jobs:
 
           echo "Project cleaned."
 
-
       # ==========================================
-      # 5. PYTHON
+      # 5. PYTHON 3.10
       # ==========================================
       - name: Setup Python 3.10
         uses: actions/setup-python@v5
         with:
           python-version: "3.10"
-
 
       # ==========================================
       # 6. JAVA 17
@@ -117,7 +112,6 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
-
 
       # ==========================================
       # 7. SYSTEM DEPENDENCIES
@@ -146,9 +140,86 @@ jobs:
             libssl-dev \
             build-essential
 
+      # ==========================================
+      # 8. SETUP ANDROID SDK / NDK
+      # ==========================================
+      - name: Setup Android SDK and NDK
+        shell: bash
+        run: |
+          set -e
+
+          SDK_ROOT="$ANDROID_HOME"
+
+          echo "Android SDK:"
+          echo "$SDK_ROOT"
+
+          echo "Installing Android SDK components..."
+
+          yes | sdkmanager --licenses >/dev/null || true
+
+          sdkmanager \
+            "platform-tools" \
+            "platforms;android-31" \
+            "build-tools;35.0.0" \
+            "ndk;25.2.9519653"
+
+          echo ""
+          echo "=== Installed NDKs ==="
+          ls -la "$SDK_ROOT/ndk" || true
+
+          echo ""
+          echo "=== Selected NDK ==="
+
+          NDK_PATH="$SDK_ROOT/ndk/25.2.9519653"
+
+          if [ ! -d "$NDK_PATH" ]; then
+            echo "ERROR: NDK 25.2.9519653 was not installed."
+            exit 1
+          fi
+
+          echo "NDK_PATH=$NDK_PATH"
+
+          echo "ANDROID_NDK_HOME=$NDK_PATH" >> "$GITHUB_ENV"
+          echo "ANDROID_NDK=$NDK_PATH" >> "$GITHUB_ENV"
 
       # ==========================================
-      # 8. INSTALL BUILDOZER
+      # 9. VERIFY ANDROID ENVIRONMENT
+      # ==========================================
+      - name: Verify Android environment
+        shell: bash
+        run: |
+          set -e
+
+          echo "=========================================="
+          echo "ANDROID ENVIRONMENT"
+          echo "=========================================="
+
+          echo "ANDROID_HOME:"
+          echo "$ANDROID_HOME"
+
+          echo ""
+          echo "ANDROID_SDK_ROOT:"
+          echo "$ANDROID_SDK_ROOT"
+
+          echo ""
+          echo "ANDROID_NDK:"
+          echo "$ANDROID_NDK"
+
+          echo ""
+          echo "ANDROID_NDK_HOME:"
+          echo "$ANDROID_NDK_HOME"
+
+          echo ""
+          echo "NDK version:"
+          "$ANDROID_NDK_HOME/ndk-build" --version || true
+
+          echo ""
+          echo "Installed SDK packages:"
+          sdkmanager --list_installed | grep -E \
+            "platforms;android-31|build-tools;35.0.0|ndk;25.2.9519653" || true
+
+      # ==========================================
+      # 10. INSTALL BUILDOZER
       # ==========================================
       - name: Install Buildozer
         shell: bash
@@ -168,23 +239,37 @@ jobs:
           java -version
           buildozer --version
 
-
       # ==========================================
-      # 9. SHOW PROJECT CONFIG
+      # 11. CHECK BUILDOZER CONFIG
       # ==========================================
       - name: Check buildozer.spec
         shell: bash
         working-directory: ${{ env.PROJECT_DIR }}
         run: |
+          set -e
+
           echo "=========================================="
           echo "CHECKMATE BUILDOZER CONFIG"
           echo "=========================================="
 
           cat buildozer.spec
 
+          echo ""
+          echo "=========================================="
+          echo "CHECKING FOR OLD NDK SETTINGS"
+          echo "=========================================="
+
+          if grep -nE "android\.ndk[ _]?=|android\.ndk_path" buildozer.spec; then
+            echo ""
+            echo "ERROR: Old/custom NDK setting detected."
+            echo "Remove android.ndk / android.ndk_path from buildozer.spec."
+            exit 1
+          fi
+
+          echo "No old NDK override detected."
 
       # ==========================================
-      # 10. FORCE CLEAN BUILDOZER ENVIRONMENT
+      # 12. FORCE CLEAN BUILDOZER ENVIRONMENT
       # ==========================================
       - name: Clean Buildozer environment
         shell: bash
@@ -197,11 +282,18 @@ jobs:
           rm -rf "$PROJECT_DIR/.buildozer"
           rm -rf "$PROJECT_DIR/bin"
 
+          echo ""
+          echo "Checking that old Buildozer NDK is gone..."
+
+          if [ -d "$HOME/.buildozer/android/platform/android-ndk-r23b" ]; then
+            echo "ERROR: Old NDK r23b still exists."
+            exit 1
+          fi
+
           echo "Buildozer environment cleaned."
 
-
       # ==========================================
-      # 11. BUILD
+      # 13. BUILD CHECKMATE
       # ==========================================
       - name: Build CHECKMATE
         shell: bash
@@ -231,13 +323,16 @@ jobs:
           buildozer --version
 
           echo ""
+          echo "Android NDK:"
+          echo "$ANDROID_NDK_HOME"
+
+          echo ""
           echo "Starting Buildozer..."
 
-          yes | buildozer android debug
-
+          buildozer android debug
 
       # ==========================================
-      # 12. CHECK APK
+      # 14. FIND APK
       # ==========================================
       - name: Find APK
         shell: bash
@@ -266,9 +361,8 @@ jobs:
           echo ""
           echo "CHECKMATE APK generated successfully."
 
-
       # ==========================================
-      # 13. UPLOAD APK
+      # 15. UPLOAD APK
       # ==========================================
       - name: Upload CHECKMATE APK
         uses: actions/upload-artifact@v4
