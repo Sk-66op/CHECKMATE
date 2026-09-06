@@ -9,6 +9,10 @@ jobs:
   build:
     name: Build Checkmate APK
     runs-on: ubuntu-22.04
+    
+    # Use the official Kivy Buildozer Docker image
+    container:
+      image: kivy/buildozer:latest
 
     steps:
       - name: Checkout repository
@@ -16,90 +20,46 @@ jobs:
 
       - name: Prepare files (extract ZIP if exists)
         run: |
+          echo "=== Current structure ==="
+          ls -la
+          
           ZIP_FILE=$(find . -name "*.zip" | head -1)
           if [ -n "$ZIP_FILE" ]; then
+            echo "✅ Found ZIP file: $ZIP_FILE"
             unzip -o "$ZIP_FILE"
+            # Move files from extracted folder to root
             for dir in */; do
               if [ -f "${dir}main.py" ] || [ -f "${dir}buildozer.spec" ]; then
+                echo "Found project files in: $dir"
                 cp -r "${dir}"* .
+                break
               fi
             done
           fi
+          
+          echo ""
+          echo "=== Final structure ==="
+          ls -la
+          echo ""
+          echo "=== Checking for buildozer.spec ==="
           find . -name "buildozer.spec"
 
-      - name: Set up Java 17
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "17"
-
-      - name: Set up Python 3.9
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.9"
-
-      - name: Install dependencies
+      - name: Build APK with Buildozer
         run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            git zip unzip \
-            autoconf automake libtool pkg-config \
-            zlib1g-dev libncurses5-dev libncursesw5-dev \
-            cmake libffi-dev libssl-dev gettext autopoint \
-            openjdk-17-jdk python3-dev build-essential \
-            wget
-
-      - name: Install Python build tools
-        run: |
-          python -m pip install --upgrade pip setuptools wheel
-          python -m pip install buildozer cython
-
-      - name: Let Buildozer download SDK, then install build tools
-        run: |
-          # First, let Buildozer create its directory structure
-          mkdir -p ~/.buildozer/android/platform/android-sdk
-          
-          # Download and install build tools directly into Buildozer's SDK
-          export ANDROID_HOME=~/.buildozer/android/platform/android-sdk
-          export ANDROID_SDK_ROOT=~/.buildozer/android/platform/android-sdk
-          mkdir -p $ANDROID_HOME
-          
-          cd $ANDROID_HOME
-          
-          # Download command-line tools
-          wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
-          unzip -q commandlinetools-linux-11076708_latest.zip
-          rm commandlinetools-linux-11076708_latest.zip
-          
-          # Setup directory structure
-          mkdir -p cmdline-tools
-          mv cmdline-tools cmdline-tools/latest 2>/dev/null || true
-          
-          # Accept licenses
-          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses 2>/dev/null || true
-          
-          # Install build tools 30.0.3
-          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platform-tools" "platforms;android-30" "build-tools;30.0.3"
-          
-          echo "✅ Build tools installed in Buildozer's SDK directory"
-          echo "Checking AIDL:"
-          find $ANDROID_HOME -name "aidl" 2>/dev/null
-
-      - name: Build APK
-        run: |
+          # Find the directory with buildozer.spec
           SPEC_DIR=$(find . -name "buildozer.spec" -exec dirname {} \; | head -1)
           if [ -z "$SPEC_DIR" ]; then
             echo "❌ buildozer.spec not found!"
             exit 1
           fi
-          echo "Building in: $SPEC_DIR"
+          
+          echo "Found buildozer.spec in: $SPEC_DIR"
           cd "$SPEC_DIR"
           
-          export ANDROID_HOME=~/.buildozer/android/platform/android-sdk
-          export ANDROID_SDK_ROOT=~/.buildozer/android/platform/android-sdk
-          
+          # The Docker container has all SDK tools pre-installed
+          # Build with verbose output
           buildozer -v android debug
-        timeout-minutes: 50
+        timeout-minutes: 60
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
