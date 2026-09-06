@@ -2,63 +2,20 @@ name: Build Android APK
 
 on:
   workflow_dispatch:
-  push:
-    branches: [ main, master ]
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Extract ZIP if exists
-        run: |
-          if [ -f "*.zip" ]; then
-            unzip -o *.zip
-          fi
-          # Move files to root if needed
-          if [ -d "CHECKMATE/ChessAI" ]; then
-            cp -r CHECKMATE/ChessAI/* .
-          fi
-          ls -la
-
-      - name: Setup Python
-        uses: actions/setup-python@v4
+      - uses: actions/checkout@v4
+      
+      - name: Build APK
+        uses: B00TK1D/android-build-action@v1
         with:
           python-version: '3.9'
-
-      - name: Setup Java
-        uses: actions/setup-java@v3
-        with:
-          distribution: 'temurin'
-          java-version: '17'
-
-      - name: Install Dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            git zip unzip \
-            autoconf automake libtool pkg-config \
-            zlib1g-dev libncurses5-dev libncursesw5-dev \
-            cmake libffi-dev libssl-dev gettext autopoint \
-            openjdk-17-jdk python3-dev build-essential \
-            wget
-
-      - name: Install Buildozer
-        run: |
-          pip install --upgrade pip
-          pip install buildozer
-          pip install cython
-
-      - name: Build APK
-        run: |
-          echo "y" | buildozer android debug
-        timeout-minutes: 60
-
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: Checkmate-APK
-          path: bin/*.apk
+          requirements: kivy==2.1.0,kivymd==1.1.1,chess==1.10.0,pillow
+          package-name: checkmate
+          app-name: Checkmate
+          android-api: 30
+          android-min-api: 21
+          android-ndk: 23b
