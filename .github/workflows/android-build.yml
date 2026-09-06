@@ -16,26 +16,15 @@ jobs:
 
       - name: Prepare files (extract ZIP if exists)
         run: |
-          echo "=== Current structure ==="
-          ls -la
-          
           ZIP_FILE=$(find . -name "*.zip" | head -1)
           if [ -n "$ZIP_FILE" ]; then
-            echo "✅ Found ZIP file: $ZIP_FILE"
             unzip -o "$ZIP_FILE"
             for dir in */; do
               if [ -f "${dir}main.py" ] || [ -f "${dir}buildozer.spec" ]; then
-                echo "Found project files in: $dir"
                 cp -r "${dir}"* .
               fi
             done
           fi
-          
-          echo ""
-          echo "=== Final structure ==="
-          ls -la
-          echo ""
-          echo "=== Checking for buildozer.spec ==="
           find . -name "buildozer.spec"
 
       - name: Set up Java 17
@@ -49,7 +38,7 @@ jobs:
         with:
           python-version: "3.9"
 
-      - name: Install system dependencies
+      - name: Install dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -57,24 +46,23 @@ jobs:
             autoconf automake libtool pkg-config \
             zlib1g-dev libncurses5-dev libncursesw5-dev \
             cmake libffi-dev libssl-dev gettext autopoint \
-            openjdk-17-jdk python3-dev build-essential \
-            wget
-
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-        with:
-          packages: |
-            platforms;android-30
-            build-tools;30.0.3
-            platform-tools
-          cmdline-tools: latest
+            openjdk-17-jdk python3-dev build-essential
 
       - name: Install Python build tools
         run: |
           python -m pip install --upgrade pip setuptools wheel
           python -m pip install buildozer cython
 
-      - name: Build APK
+      - name: Pre-accept Android SDK License
+        run: |
+          # This will run before Buildozer to ensure licenses are accepted
+          mkdir -p ~/.android
+          echo "### User accepted all Android SDK licenses" > ~/.android/repositories.cfg
+          
+          # Also set environment variable to skip license prompts
+          echo "sdkman.auto.answer.license=yes" >> ~/.android/repositories.cfg
+
+      - name: Build APK (with auto-accept)
         run: |
           SPEC_DIR=$(find . -name "buildozer.spec" -exec dirname {} \; | head -1)
           if [ -z "$SPEC_DIR" ]; then
@@ -84,14 +72,16 @@ jobs:
           echo "Building in: $SPEC_DIR"
           cd "$SPEC_DIR"
           
-          export ANDROID_HOME=/usr/local/lib/android/sdk
-          export ANDROID_SDK_ROOT=/usr/local/lib/android/sdk
-          
-          buildozer -v android debug
+          # Build with non-interactive mode
+          buildozer android debug
         timeout-minutes: 50
         env:
-          ANDROID_HOME: /usr/local/lib/android/sdk
-          ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+          # These environment variables help with non-interactive builds
+          DEBIAN_FRONTEND: noninteractive
+          P4A_RELEASE_KEYSTORE: /dev/null
+          P4A_RELEASE_KEYSTORE_PASSWD: /dev/null
+          P4A_RELEASE_KEYALIAS: /dev/null
+          P4A_RELEASE_KEYALIAS_PASSWD: /dev/null
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
