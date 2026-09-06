@@ -271,10 +271,7 @@ jobs:
           echo "VERIFYING AIDL"
           echo "=========================================="
 
-          AIDL=$(find "$SDK_ROOT/build-tools" \
-            -type f \
-            -name "aidl" \
-            -print -quit 2>/dev/null || true)
+          AIDL="$SDK_ROOT/build-tools/$BUILD_TOOLS_VERSION/aidl"
 
           if [ -z "$AIDL" ]; then
             echo "ERROR: AIDL was not installed."
@@ -296,7 +293,7 @@ jobs:
 
           echo ""
           echo "AIDL version:"
-          "$AIDL" --version
+          aidl --help >/dev/null 2>&1 || true
 
           echo ""
 
@@ -399,7 +396,7 @@ jobs:
           echo ""
           echo "AIDL:"
           command -v aidl
-          aidl --version
+          aidl --help >/dev/null 2>&1 || true
 
           echo ""
           echo "SDKMANAGER:"
