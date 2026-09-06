@@ -1,14 +1,28 @@
-name: Build Android APK (Fixed)
+name: Build Android APK
 
 on:
   workflow_dispatch:
+  push:
+    branches: [ main, master ]
 
 jobs:
   build:
+    name: Build APK
     runs-on: ubuntu-22.04
-    
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Extract ZIP if exists
+        run: |
+          if ls *.zip 1> /dev/null 2>&1; then
+            unzip -o *.zip
+          fi
+          if [ -d "CHECKMATE/ChessAI" ]; then
+            cp -r CHECKMATE/ChessAI/* .
+          fi
+          ls -la
 
       - name: Setup Python
         uses: actions/setup-python@v4
@@ -19,9 +33,9 @@ jobs:
         uses: actions/setup-java@v3
         with:
           distribution: 'temurin'
-          java-version: '11'
+          java-version: '17'
 
-      - name: Install Dependencies
+      - name: Install System Dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -29,46 +43,32 @@ jobs:
             autoconf automake libtool pkg-config \
             zlib1g-dev libncurses5-dev libncursesw5-dev \
             cmake libffi-dev libssl-dev \
-            openjdk-11-jdk python3-dev \
-            build-essential wget
+            openjdk-17-jdk python3-dev \
+            build-essential
 
-      - name: Install Buildozer
+      - name: Install Python Packages
         run: |
-          pip install --upgrade pip
-          pip install buildozer==1.4.0
+          python -m pip install --upgrade pip setuptools wheel
+          python -m pip install cython==0.29.33
+          python -m pip install buildozer==1.4.0
 
-      - name: Create clean buildozer.spec
+      - name: Verify Installation
         run: |
-          cat > buildozer.spec << 'EOF'
-          [app]
-          title = Checkmate
-          package.name = checkmate
-          package.domain = org.miniproject
-          source.dir = .
-          source.include_exts = py,png,jpg,jpeg,kv,atlas,json
-          version = 1.0
-          requirements = python3,kivy==2.0.0,kivymd==1.0.0,chess==1.10.0,pillow
-          orientation = portrait
-          fullscreen = 0
-          android.permissions = INTERNET
-          android.api = 29
-          android.minapi = 21
-          android.ndk = 21d
-          android.archs = armeabi-v7a
-          android.allow_backup = True
-          android.enable_androidx = True
-          [buildozer]
-          log_level = 2
-          warn_on_root = 1
-          EOF
+          python -c "import cython; print(f'Cython version: {cython.__version__}')"
+          python -c "import buildozer; print(f'Buildozer version: {buildozer.__version__}')"
+
+      - name: Initialize Buildozer
+        run: |
+          buildozer init 2>/dev/null || true
 
       - name: Build APK
         run: |
           buildozer android debug
-        timeout-minutes: 45
+        timeout-minutes: 60
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: Checkmate-APK
           path: bin/*.apk
+          if-no-files-found: error
