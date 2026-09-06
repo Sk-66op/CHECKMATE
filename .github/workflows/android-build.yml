@@ -405,8 +405,24 @@ jobs:
 
           echo ""
           echo "ADB:"
-          command -v adb
-          adb version
+          ADB="$SDK_ROOT/platform-tools/adb"
+
+          if [ ! -x "$ADB" ]; then
+               echo "ERROR: ADB was not found at:"
+               echo "$ADB"
+               echo ""
+               echo "Platform-tools contents:"
+               find "$SDK_ROOT/platform-tools" -maxdepth 2 -type f | sort
+               exit 1
+          fi
+
+          echo "ADB found:"
+          echo "$ADB"
+
+          "$ADB" version
+
+          echo "$SDK_ROOT/platform-tools" >> "$GITHUB_PATH"
+          export PATH="$SDK_ROOT/platform-tools:$PATH"
 
           echo ""
           echo "NDK:"
