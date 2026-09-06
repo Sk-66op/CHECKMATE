@@ -6,11 +6,9 @@ on:
 jobs:
   build:
     runs-on: ubuntu-22.04
-    container:
-      image: kivy/buildozer:latest
 
     steps:
-      - name: Checkout code
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: Extract ZIP
@@ -23,94 +21,36 @@ jobs:
           fi
           ls -la
 
-      - name: Install Cython
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: Setup Java
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Install Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            git zip unzip \
+            autoconf automake libtool pkg-config \
+            zlib1g-dev libncurses5-dev libncursesw5-dev \
+            cmake libffi-dev libssl-dev \
+            openjdk-17-jdk python3-dev \
+            build-essential wget
+
+      - name: Install Buildozer
         run: |
           pip install --upgrade pip
           pip install cython==0.29.33
+          pip install buildozer==1.4.0
 
-      - name: Setup Android SDK Correctly
+      - name: Build APK (Let Buildozer handle SDK)
         run: |
-          # Install Java
-          apt-get update
-          apt-get install -y openjdk-17-jdk wget unzip
-          
-          # Set up SDK path
-          export ANDROID_HOME=/root/.buildozer/android/platform/android-sdk
-          export ANDROID_SDK_ROOT=/root/.buildozer/android/platform/android-sdk
-          mkdir -p $ANDROID_HOME
-          
-          cd $ANDROID_HOME
-          
-          # Download command-line tools (NEWER VERSION)
-          wget https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip
-          unzip -q commandlinetools-linux-9477386_latest.zip
-          rm commandlinetools-linux-9477386_latest.zip
-          
-          # Create the correct directory structure
-          mkdir -p cmdline-tools
-          mv cmdline-tools cmdline-tools/latest 2>/dev/null || true
-          
-          # Alternative if the above fails
-          if [ ! -f "cmdline-tools/latest/bin/sdkmanager" ]; then
-            mkdir -p cmdline-tools/latest
-            mv cmdline-tools/* cmdline-tools/latest/ 2>/dev/null || true
-          fi
-          
-          # Accept licenses
-          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses 2>/dev/null || true
-          
-          # Install only what we need
-          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "build-tools;30.0.3" "platforms;android-30" "platform-tools"
-          
-          # Create symlink for AIDL
-          if [ -f "$ANDROID_HOME/build-tools/30.0.3/aidl" ]; then
-            ln -sf $ANDROID_HOME/build-tools/30.0.3/aidl /usr/local/bin/aidl
-            echo "✅ AIDL installed successfully"
-          fi
-          
-          # Set environment
-          echo "ANDROID_HOME=$ANDROID_HOME" >> $GITHUB_ENV
-          echo "ANDROID_SDK_ROOT=$ANDROID_HOME" >> $GITHUB_ENV
-          echo "$ANDROID_HOME/build-tools/30.0.3" >> $GITHUB_PATH
-          
-          echo "✅ SDK Setup Complete"
-
-      - name: Create buildozer.spec
-        run: |
-          cat > buildozer.spec << 'EOF'
-          [app]
-          title = Checkmate
-          package.name = checkmate
-          package.domain = org.miniproject
-          
-          source.dir = .
-          source.include_exts = py,png,jpg,jpeg,kv,atlas,json,ttf
-          
-          version = 1.0
-          requirements = python3,kivy==2.1.0,kivymd==1.1.1,chess==1.10.0,pillow
-          
-          orientation = portrait
-          fullscreen = 0
-          
-          android.permissions = INTERNET
-          android.api = 30
-          android.minapi = 21
-          android.ndk = 23b
-          android.archs = arm64-v8a
-          android.allow_backup = True
-          android.enable_androidx = True
-          
-          [buildozer]
-          log_level = 2
-          warn_on_root = 0
-          EOF
-
-      - name: Build APK
-        run: |
-          export ANDROID_HOME=/root/.buildozer/android/platform/android-sdk
-          export ANDROID_SDK_ROOT=/root/.buildozer/android/platform/android-sdk
-          export PATH=/root/.buildozer/android/platform/android-sdk/build-tools/30.0.3:$PATH
-          
           echo "y" | buildozer android debug
         timeout-minutes: 60
 
