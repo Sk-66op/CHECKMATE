@@ -148,14 +148,57 @@ jobs:
         run: |
           set -e
 
-          SDK_ROOT="$ANDROID_HOME"
+          SDK_ROOT="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
 
           echo "Android SDK:"
           echo "$SDK_ROOT"
 
-          echo "Installing Android SDK components..."
+          echo ""
+          echo "Searching for sdkmanager..."
+
+          SDKMANAGER=$(find "$SDK_ROOT/cmdline-tools" \
+            -type f \
+            -name "sdkmanager" \
+            -print -quit 2>/dev/null || true)
+
+          if [ -z "$SDKMANAGER" ]; then
+            SDKMANAGER=$(find "$SDK_ROOT" \
+              -type f \
+              -name "sdkmanager" \
+              -print -quit 2>/dev/null || true)
+          fi
+
+          if [ -z "$SDKMANAGER" ]; then
+            echo "ERROR: sdkmanager was not found."
+            echo ""
+            echo "Android SDK contents:"
+            find "$SDK_ROOT" -maxdepth 4 -type f | head -100
+            exit 1
+          fi
+
+          echo "Found sdkmanager:"
+          echo "$SDKMANAGER"
+
+          SDKMANAGER_DIR=$(dirname "$SDKMANAGER")
+
+          echo ""
+          echo "Adding sdkmanager to PATH..."
+
+          echo "$SDKMANAGER_DIR" >> "$GITHUB_PATH"
+
+          export PATH="$SDKMANAGER_DIR:$PATH"
+
+          echo ""
+          echo "sdkmanager version:"
+          sdkmanager --version
+
+          echo ""
+          echo "Accepting Android licenses..."
 
           yes | sdkmanager --licenses >/dev/null || true
+
+          echo ""
+          echo "Installing Android SDK components..."
 
           sdkmanager \
             "platform-tools" \
@@ -165,22 +208,25 @@ jobs:
 
           echo ""
           echo "=== Installed NDKs ==="
+
           ls -la "$SDK_ROOT/ndk" || true
 
-          echo ""
-          echo "=== Selected NDK ==="
-
           NDK_PATH="$SDK_ROOT/ndk/25.2.9519653"
+
+          echo ""
+          echo "Selected NDK:"
+          echo "$NDK_PATH"
 
           if [ ! -d "$NDK_PATH" ]; then
             echo "ERROR: NDK 25.2.9519653 was not installed."
             exit 1
           fi
 
-          echo "NDK_PATH=$NDK_PATH"
-
           echo "ANDROID_NDK_HOME=$NDK_PATH" >> "$GITHUB_ENV"
           echo "ANDROID_NDK=$NDK_PATH" >> "$GITHUB_ENV"
+
+          echo ""
+          echo "Android SDK/NDK setup complete."
 
       # ==========================================
       # 9. VERIFY ANDROID ENVIRONMENT
