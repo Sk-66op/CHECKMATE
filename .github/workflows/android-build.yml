@@ -10,7 +10,6 @@ jobs:
     name: Build Checkmate APK
     runs-on: ubuntu-22.04
     
-    # Use the official Kivy Buildozer Docker image
     container:
       image: kivy/buildozer:latest
 
@@ -20,45 +19,24 @@ jobs:
 
       - name: Prepare files (extract ZIP if exists)
         run: |
-          echo "=== Current structure ==="
-          ls -la
-          
           ZIP_FILE=$(find . -name "*.zip" | head -1)
           if [ -n "$ZIP_FILE" ]; then
-            echo "✅ Found ZIP file: $ZIP_FILE"
             unzip -o "$ZIP_FILE"
-            # Move files from extracted folder to root
             for dir in */; do
               if [ -f "${dir}main.py" ] || [ -f "${dir}buildozer.spec" ]; then
-                echo "Found project files in: $dir"
                 cp -r "${dir}"* .
                 break
               fi
             done
           fi
-          
-          echo ""
-          echo "=== Final structure ==="
           ls -la
-          echo ""
-          echo "=== Checking for buildozer.spec ==="
-          find . -name "buildozer.spec"
 
-      - name: Build APK with Buildozer
+      - name: Build APK
         run: |
-          # Find the directory with buildozer.spec
           SPEC_DIR=$(find . -name "buildozer.spec" -exec dirname {} \; | head -1)
-          if [ -z "$SPEC_DIR" ]; then
-            echo "❌ buildozer.spec not found!"
-            exit 1
-          fi
-          
-          echo "Found buildozer.spec in: $SPEC_DIR"
           cd "$SPEC_DIR"
-          
-          # The Docker container has all SDK tools pre-installed
-          # Build with verbose output
-          buildozer -v android debug
+          # Answer yes to root warning
+          echo "y" | buildozer android debug
         timeout-minutes: 60
 
       - name: Upload APK
