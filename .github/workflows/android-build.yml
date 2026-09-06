@@ -9,43 +9,44 @@ jobs:
 
     steps:
 
-      # --------------------------------------------------
+      # ==========================================
       # 1. CHECKOUT
-      # --------------------------------------------------
+      # ==========================================
       - name: Checkout repository
         uses: actions/checkout@v4
 
 
-      # --------------------------------------------------
-      # 2. EXTRACT CHECKMATE PROJECT
-      # --------------------------------------------------
+      # ==========================================
+      # 2. EXTRACT PROJECT ZIP
+      # ==========================================
       - name: Extract CHECKMATE project
         shell: bash
         run: |
           set -e
 
-          echo "=== Repository contents ==="
+          echo "=== Repository ==="
           ls -la
 
-          # Find ZIP files in repository root
           ZIP_FILE=$(find . -maxdepth 1 -type f -iname "*.zip" | head -n 1 || true)
 
           if [ -n "$ZIP_FILE" ]; then
             echo "Found ZIP: $ZIP_FILE"
 
+            rm -rf extracted
             mkdir -p extracted
+
             unzip -o "$ZIP_FILE" -d extracted
 
-            echo "=== Extracted contents ==="
+            echo "=== Extracted ==="
             find extracted -maxdepth 4 -type f | head -200
           else
-            echo "No ZIP found. Using repository files directly."
+            echo "No ZIP found."
           fi
 
 
-      # --------------------------------------------------
-      # 3. LOCATE buildozer.spec
-      # --------------------------------------------------
+      # ==========================================
+      # 3. FIND REAL PROJECT
+      # ==========================================
       - name: Locate CHECKMATE project
         shell: bash
         run: |
@@ -61,69 +62,62 @@ jobs:
             | head -n 1)
 
           if [ -z "$SPEC_FILE" ]; then
-            echo "ERROR: buildozer.spec was not found."
-            echo "Full project tree:"
-            find . -maxdepth 5 -type f | sort
+            echo "ERROR: buildozer.spec not found."
+
+            echo "=== Project tree ==="
+            find . -maxdepth 6 -type f | sort
+
             exit 1
           fi
 
           PROJECT_DIR=$(dirname "$SPEC_FILE")
           PROJECT_DIR=$(realpath "$PROJECT_DIR")
 
-          echo "Found buildozer.spec:"
+          echo "Found:"
           echo "$SPEC_FILE"
-
-          echo "CHECKMATE project directory:"
-          echo "$PROJECT_DIR"
 
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
 
-          echo "=== Project contents ==="
+          echo "=== Project directory ==="
           ls -la "$PROJECT_DIR"
 
 
-      # --------------------------------------------------
-      # 4. CLEAN UNNECESSARY FILES
-      # --------------------------------------------------
+      # ==========================================
+      # 4. CLEAN PROJECT
+      # ==========================================
       - name: Clean project
         shell: bash
         run: |
           set -e
 
-          echo "Cleaning unnecessary files..."
+          echo "Cleaning project..."
 
-          # Remove Windows/local virtual environment
           rm -rf "$PROJECT_DIR/.venv"
           rm -rf "$PROJECT_DIR/venv"
-
-          # Remove Python cache
-          find "$PROJECT_DIR" -type d -name "__pycache__" -prune -exec rm -rf {} +
-
-          # Remove previous Android/build output
           rm -rf "$PROJECT_DIR/.buildozer"
           rm -rf "$PROJECT_DIR/bin"
 
-          # Remove git metadata if present inside ZIP
-          rm -rf "$PROJECT_DIR/.git"
+          find "$PROJECT_DIR" \
+            -type d \
+            -name "__pycache__" \
+            -prune \
+            -exec rm -rf {} +
 
           echo "Cleaning complete."
 
-          echo "=== Final project contents ==="
-          find "$PROJECT_DIR" -maxdepth 2 -type f | sort
 
-
-      # --------------------------------------------------
-      # 5. SETUP PYTHON
-      # --------------------------------------------------
+      # ==========================================
+      # 5. PYTHON
+      # ==========================================
       - name: Setup Python 3.10
         uses: actions/setup-python@v5
         with:
           python-version: "3.10"
 
 
-      # --------------------------------------------------
-      # 6. SETUP JAVA 17
-      # --------------------------------------------------
+      # ==========================================
+      # 6. JAVA
+      # ==========================================
       - name: Setup Java 17
         uses: actions/setup-java@v4
         with:
@@ -131,9 +125,9 @@ jobs:
           java-version: "17"
 
 
-      # --------------------------------------------------
-      # 7. INSTALL SYSTEM DEPENDENCIES
-      # --------------------------------------------------
+      # ==========================================
+      # 7. SYSTEM DEPENDENCIES
+      # ==========================================
       - name: Install system dependencies
         shell: bash
         run: |
@@ -161,9 +155,9 @@ jobs:
             build-essential
 
 
-      # --------------------------------------------------
-      # 8. INSTALL BUILD TOOLS
-      # --------------------------------------------------
+      # ==========================================
+      # 8. BUILDOZER
+      # ==========================================
       - name: Install Buildozer
         shell: bash
         run: |
@@ -176,15 +170,16 @@ jobs:
             "buildozer==1.4.0"
 
           echo "=== Versions ==="
+
           python --version
           java -version
           buildozer --version
 
 
-      # --------------------------------------------------
-      # 9. INSTALL ANDROID SDK CLEANLY
-      # --------------------------------------------------
-      - name: Install Android SDK
+      # ==========================================
+      # 9. ANDROID SDK
+      # ==========================================
+      - name: Install Android SDK command line tools
         shell: bash
         run: |
           set -e
@@ -192,14 +187,10 @@ jobs:
           export ANDROID_HOME="$HOME/android-sdk"
           export ANDROID_SDK_ROOT="$ANDROID_HOME"
 
-          echo "ANDROID_HOME=$ANDROID_HOME"
-
-          # Completely remove potentially broken SDK
           rm -rf "$ANDROID_HOME"
 
           mkdir -p "$ANDROID_HOME/cmdline-tools"
 
-          # Work in temporary directory
           cd "$RUNNER_TEMP"
 
           rm -rf android-cmdline-tools
@@ -211,84 +202,95 @@ jobs:
             "https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip" \
             -O commandlinetools.zip
 
-          echo "Extracting command line tools..."
-
           mkdir android-cmdline-tools
 
-          unzip -q commandlinetools.zip \
+          echo "Extracting..."
+
+          unzip -q \
+            commandlinetools.zip \
             -d android-cmdline-tools
 
-          # IMPORTANT:
-          # Move extracted cmdline-tools into latest.
-          # We do NOT create/move cmdline-tools into itself.
           mv \
             android-cmdline-tools/cmdline-tools \
             "$ANDROID_HOME/cmdline-tools/latest"
 
-          echo "=== sdkmanager ==="
+          echo "=== SDKMANAGER ==="
 
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --version
 
-          # Add SDK tools to PATH
           echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
           echo "ANDROID_SDK_ROOT=$ANDROID_HOME" >> "$GITHUB_ENV"
 
           echo "$ANDROID_HOME/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
           echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
-          echo "$ANDROID_HOME/build-tools/34.0.0" >> "$GITHUB_PATH"
+          echo "$ANDROID_HOME/build-tools/33.0.2" >> "$GITHUB_PATH"
 
 
-      # --------------------------------------------------
-      # 10. ACCEPT ANDROID LICENSES
-      # --------------------------------------------------
+      # ==========================================
+      # 10. ACCEPT LICENSES
+      # ==========================================
       - name: Accept Android licenses
         shell: bash
         run: |
           set -e
 
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
-            --licenses > /dev/null || true
+            --licenses >/dev/null 2>&1 || true
 
 
-      # --------------------------------------------------
-      # 11. INSTALL ANDROID COMPONENTS INCLUDING AIDL
-      # --------------------------------------------------
+      # ==========================================
+      # 11. INSTALL SDK COMPONENTS
+      # ==========================================
       - name: Install Android SDK components
         shell: bash
         run: |
           set -e
 
-          echo "Installing Android SDK..."
+          echo "Installing Android SDK components..."
 
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
             "platform-tools" \
-            "platforms;android-34" \
-            "build-tools;34.0.0" \
-            "ndk;25b"
+            "platforms;android-33" \
+            "build-tools;33.0.2" \
+            "ndk;23.2.8568313"
 
-          echo "=== Android SDK installed ==="
+          echo "=== SDK installation complete ==="
 
-          echo "Build Tools:"
-          ls -la "$ANDROID_HOME/build-tools/34.0.0"
+          echo ""
+          echo "Installed SDK:"
+          find "$ANDROID_HOME" \
+            -maxdepth 3 \
+            -type d \
+            | sort
 
-          echo "AIDL:"
-          ls -la "$ANDROID_HOME/build-tools/34.0.0/aidl"
+          echo ""
+          echo "Checking NDK..."
+
+          if [ ! -d "$ANDROID_HOME/ndk/23.2.8568313" ]; then
+            echo "ERROR: NDK 23.2.8568313 was not installed."
+            exit 1
+          fi
+
+          echo "NDK found."
 
 
-      # --------------------------------------------------
+      # ==========================================
       # 12. VERIFY AIDL
-      # --------------------------------------------------
+      # ==========================================
       - name: Verify AIDL
         shell: bash
         run: |
           set -e
 
-          AIDL="$ANDROID_HOME/build-tools/34.0.0/aidl"
+          AIDL="$ANDROID_HOME/build-tools/33.0.2/aidl"
 
           echo "Checking AIDL..."
 
           if [ ! -f "$AIDL" ]; then
-            echo "ERROR: AIDL was not installed."
+            echo "ERROR: AIDL not found."
+            echo ""
+            echo "Build tools directory:"
+            ls -la "$ANDROID_HOME/build-tools/33.0.2"
             exit 1
           fi
 
@@ -297,18 +299,21 @@ jobs:
             exit 1
           fi
 
-          echo "AIDL exists:"
+          echo "AIDL found:"
           ls -lh "$AIDL"
 
-          echo "Running AIDL:"
+          echo ""
+          echo "AIDL test:"
+
           "$AIDL" --version || true
 
+          echo ""
           echo "AIDL verification PASSED."
 
 
-      # --------------------------------------------------
-      # 13. CONFIGURE SDK ENVIRONMENT
-      # --------------------------------------------------
+      # ==========================================
+      # 13. CONFIGURE ENVIRONMENT
+      # ==========================================
       - name: Configure Android environment
         shell: bash
         run: |
@@ -316,45 +321,71 @@ jobs:
 
           echo "$ANDROID_HOME/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
           echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
-          echo "$ANDROID_HOME/build-tools/34.0.0" >> "$GITHUB_PATH"
+          echo "$ANDROID_HOME/build-tools/33.0.2" >> "$GITHUB_PATH"
 
           echo "ANDROID_HOME=$ANDROID_HOME"
           echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
 
-          echo "PATH=$PATH"
+          echo ""
+          echo "SDK:"
+          ls -la "$ANDROID_HOME"
 
-          echo "=== SDK packages ==="
+          echo ""
+          echo "NDK:"
+          ls -la "$ANDROID_HOME/ndk/23.2.8568313"
 
-          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
-            --list_installed || true
+          echo ""
+          echo "Build Tools:"
+          ls -la "$ANDROID_HOME/build-tools/33.0.2"
 
 
-      # --------------------------------------------------
-      # 14. SHOW CURRENT BUILDOSER CONFIG
-      # --------------------------------------------------
+      # ==========================================
+      # 14. CHECK BUILDOZER CONFIG
+      # ==========================================
       - name: Check buildozer.spec
         shell: bash
         run: |
           set -e
 
-          echo "=== buildozer.spec ==="
+          echo "=========================================="
+          echo "CHECKMATE buildozer.spec"
+          echo "=========================================="
 
           cat "$PROJECT_DIR/buildozer.spec"
 
 
-      # --------------------------------------------------
-      # 15. BUILD CHECKMATE
-      # --------------------------------------------------
+      # ==========================================
+      # 15. CLEAN BUILDOZER CACHE
+      # ==========================================
+      - name: Clean Buildozer cache
+        shell: bash
+        run: |
+          set -e
+
+          echo "Removing stale Buildozer cache..."
+
+          rm -rf "$HOME/.buildozer"
+          rm -rf "$PROJECT_DIR/.buildozer"
+          rm -rf "$PROJECT_DIR/bin"
+
+          echo "Buildozer cache cleaned."
+
+
+      # ==========================================
+      # 16. BUILD CHECKMATE
+      # ==========================================
       - name: Build CHECKMATE APK
         shell: bash
         working-directory: ${{ env.PROJECT_DIR }}
+        timeout-minutes: 90
         run: |
           set -e
 
           echo "=========================================="
-          echo "        CHECKMATE ANDROID BUILD"
+          echo "       CHECKMATE ANDROID BUILD"
           echo "=========================================="
 
+          echo ""
           echo "Project:"
           pwd
 
@@ -367,30 +398,33 @@ jobs:
           java -version
 
           echo ""
-          echo "AIDL:"
-          "$ANDROID_HOME/build-tools/34.0.0/aidl" --version || true
-
-          echo ""
           echo "Buildozer:"
           buildozer --version
 
           echo ""
-          echo "Cleaning Buildozer cache..."
-
-          rm -rf "$HOME/.buildozer"
-          rm -rf ".buildozer"
-          rm -rf "bin"
+          echo "Android SDK:"
+          echo "$ANDROID_HOME"
 
           echo ""
-          echo "Starting Buildozer..."
+          echo "Android NDK:"
+          echo "$ANDROID_HOME/ndk/23.2.8568313"
+
+          echo ""
+          echo "AIDL:"
+          "$ANDROID_HOME/build-tools/33.0.2/aidl" --version || true
+
+          echo ""
+          echo "=========================================="
+          echo "STARTING BUILD"
+          echo "=========================================="
 
           yes | buildozer android debug
 
 
-      # --------------------------------------------------
-      # 16. SHOW GENERATED APK
-      # --------------------------------------------------
-      - name: Find APK
+      # ==========================================
+      # 17. FIND APK
+      # ==========================================
+      - name: Find generated APK
         shell: bash
         run: |
           set -e
@@ -408,16 +442,17 @@ jobs:
             | wc -l)
 
           if [ "$APK_COUNT" -eq 0 ]; then
-            echo "ERROR: No APK was generated."
+            echo "ERROR: APK was not generated."
             exit 1
           fi
 
+          echo ""
           echo "APK generated successfully."
 
 
-      # --------------------------------------------------
-      # 17. UPLOAD APK
-      # --------------------------------------------------
+      # ==========================================
+      # 18. UPLOAD APK
+      # ==========================================
       - name: Upload CHECKMATE APK
         uses: actions/upload-artifact@v4
         with:
